@@ -7,3 +7,4 @@ iniparser/*.user
 Test/Debug/
 Test/Release/
 Test/*.user
+resources/created.ini

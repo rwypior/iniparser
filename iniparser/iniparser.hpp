@@ -3,57 +3,262 @@
 
 #include <fstream>
 #include <string>
+#include <vector>
 #include <unordered_map>
 #include <memory>
 
 namespace Ini
 {
-	using ValueType = std::string;
-	struct RegularEntry;
+	struct ScalarEntry;
 	struct VectorEntry;
 
 	struct Entry
 	{
+		Entry() = default;
 		virtual ~Entry() = default;
 
-		ValueType getValue();
+		std::string getValue();
 		VectorEntry *getVector();
+		const VectorEntry* getVector() const;
+
+		bool empty() const { return this->toString().empty(); }
+
+		virtual bool isVector() const = 0;
+		virtual std::string toString() const = 0;
+		virtual int toInt(int def = 0) const { return empty() ? def : std::stoi(this->toString()); }
+		virtual unsigned int toUInt(unsigned int def = 0) const { return empty() ? def : std::stoul(this->toString()); }
+		virtual long toLong(long def = 0) const { return empty() ? def : std::stol(this->toString()); }
+		virtual unsigned long toULong(unsigned long def = 0) const { return empty() ? def : std::stoul(this->toString()); }
+		virtual float toFloat(float def = 0.0f) const { return empty() ? def : std::stof(this->toString()); }
+		virtual double toDouble(double def = 0.0) const { return empty() ? def : std::stod(this->toString()); }
+		virtual bool toBool(bool def = false) const { return empty() ? def : (this->toString() == "true" || this->toInt()); }
+
+		virtual Entry& operator=(const std::string &s) { return *this; };
+		virtual Entry& operator=(const char *s) { return *this; };
+		virtual Entry& operator=(int val) { return *this; };
+		virtual Entry& operator=(unsigned int val) { return *this; };
+		virtual Entry& operator=(long val) { return *this; };
+		virtual Entry& operator=(unsigned long val) { return *this; };
+		virtual Entry& operator=(float val) { return *this; };
+		virtual Entry& operator=(double val) { return *this; };
+		virtual Entry& operator=(bool val) { return *this; };
 	};
 
-	using EntryType = std::unique_ptr<Entry>;
-
-	struct RegularEntry : public Entry
+	struct ScalarEntry : public Entry
 	{
-		ValueType value;
+		std::string value;
 
-		RegularEntry(const ValueType &val)
+		ScalarEntry() = default;
+
+		ScalarEntry(const std::string&val)
 			: value(val)
 		{
 		}
+
+		ScalarEntry(const char *val)
+			: ScalarEntry(std::string(val))
+		{
+		}
+
+		template<typename T>
+		ScalarEntry(const T& val)
+			: value(std::to_string(val))
+		{
+		}
+
+		virtual bool isVector() const override
+		{
+			return false;
+		}
+
+		virtual std::string toString() const override
+		{
+			return this->value;
+		}
+
+		virtual Entry& operator=(const std::string& s) override { this->value = s; return *this; };
+		virtual Entry& operator=(const char *s) override { this->value = s; return *this; };
+		virtual Entry& operator=(int val) { this->value = std::to_string(val); return *this; };
+		virtual Entry& operator=(unsigned int val) { this->value = std::to_string(val); return *this; };
+		virtual Entry& operator=(long val) { this->value = std::to_string(val); return *this; };
+		virtual Entry& operator=(unsigned long val) { this->value = std::to_string(val); return *this; };
+		virtual Entry& operator=(float val) { this->value = std::to_string(val); return *this; };
+		virtual Entry& operator=(double val) { this->value = std::to_string(val); return *this; };
+		virtual Entry& operator=(bool val) { this->value = std::to_string(val); return *this; };
 	};
 
 	struct VectorEntry : public Entry
 	{
-		std::vector<EntryType> entries;
+		using Container = std::vector<std::unique_ptr<Entry>>;
+		Container entries;
+
+		VectorEntry() = default;
+
+		VectorEntry(VectorEntry&& b)
+			: entries(std::move(b.entries))
+		{
+		}
+
+		template<typename T>
+		VectorEntry(const std::initializer_list<T> &entries)
+		{
+			for (const auto& entry : entries)
+			{
+				this->entries.push_back(std::make_unique<ScalarEntry>(entry));
+			}
+		}
+
+		virtual bool isVector() const override
+		{
+			return true;
+		}
+
+		Container::size_type size() const
+		{
+			return this->entries.size();
+		}
+
+		virtual std::string toString() const override
+		{
+			std::string res = "[";
+			bool first = true;
+
+			for (const std::unique_ptr<Entry>& entry : this->entries)
+			{
+				if (!first)
+					res += ", ";
+
+				res += entry->toString();
+
+				first = false;
+			}
+
+			res += "]";
+
+			return res;
+		}
+
+		template<typename T>
+		void append(const T& entry)
+		{
+			this->entries.push_back(std::make_unique<ScalarEntry>(entry));
+		}
+
+		void append(std::unique_ptr<Entry> &&entry)
+		{
+			this->entries.push_back(std::move(entry));
+		}
+
+		void append(VectorEntry&& entry)
+		{
+			this->entries.push_back(std::make_unique<VectorEntry>(std::move(entry)));
+		}
+
+		Container::iterator begin() { return this->entries.begin(); }
+		Container::iterator end() { return this->entries.end(); }
+		Container::const_iterator begin() const { return this->entries.begin(); }
+		Container::const_iterator end() const { return this->entries.end(); }
+
+		Entry& operator[](Container::size_type idx) { return *this->entries[idx]; }
+		const Entry& operator[](Container::size_type idx)const  { return *this->entries[idx]; }
 	};
 
-	ValueType Entry::getValue()
+	inline std::string Entry::getValue()
 	{
-		return static_cast<RegularEntry*>(this)->value;
+		return static_cast<ScalarEntry*>(this)->value;
 	}
 
-	VectorEntry *Entry::getVector()
+	inline VectorEntry *Entry::getVector()
 	{
 		return static_cast<VectorEntry*>(this);
 	}
+
+	inline const VectorEntry* Entry::getVector() const
+	{
+		return static_cast<const VectorEntry*>(this);
+	}
 	
-	using EntriesContainer = std::unordered_map<std::string, EntryType>;
-	using SectionsContainer = std::unordered_map<std::string, EntriesContainer>;
+	struct EntryContainer
+	{
+		using Container = std::unordered_map<std::string, std::unique_ptr<Entry>>;
+		Container entries;
+
+		template<typename T>
+		ScalarEntry& insert(const std::string& name, const T& value)
+		{
+			this->entries[name] = std::make_unique<ScalarEntry>(value);
+			return static_cast<ScalarEntry&>(*this->entries[name]);
+		}
+
+		template<typename T>
+		VectorEntry& insertVector(const std::string& name, const std::initializer_list<T>& value)
+		{
+			this->entries[name] = std::make_unique<VectorEntry>(value);
+			return static_cast<VectorEntry&>(*this->entries[name]);
+		}
+
+		VectorEntry& insertVector(const std::string& name)
+		{
+			this->entries[name] = std::make_unique<VectorEntry>();
+			return static_cast<VectorEntry&>(*this->entries[name]);
+		}
+
+		Container::iterator begin() { return this->entries.begin(); }
+		Container::iterator end() { return this->entries.end(); }
+		Container::const_iterator begin() const { return this->entries.begin(); }
+		Container::const_iterator end() const { return this->entries.end(); }
+
+		Entry& operator[](const std::string &idx)
+		{
+			if (this->entries.find(idx) == this->entries.end())
+				this->entries[idx] = std::make_unique<ScalarEntry>();
+			return *this->entries[idx];
+		}
+
+		const Entry& operator[](const std::string& idx) const { return *this->entries.at(idx); }
+		const Entry& at(const std::string& idx) const { return (*this)[idx]; }
+	};
+
+	struct SectionContainer
+	{
+		using Container = std::unordered_map<std::string, EntryContainer>;
+		Container sections;
+
+		Container::iterator begin() { return this->sections.begin(); }
+		Container::iterator end() { return this->sections.end(); }
+		Container::const_iterator begin() const { return this->sections.begin(); }
+		Container::const_iterator end() const { return this->sections.end(); }
+
+		Container::iterator find(const std::string& idx) { return this->sections.find(idx); };
+
+		EntryContainer& operator[](const std::string& idx)
+		{
+			if (this->sections.find(idx) == this->sections.end())
+				this->sections[idx] = EntryContainer();
+			return this->sections[idx];
+		}
+
+		const EntryContainer& operator[](const std::string& idx) const { return this->sections.at(idx); }
+		const EntryContainer& at(const std::string& idx) const { return (*this)[idx]; }
+	};
+
+	using Section = EntryContainer;
 
 	struct Model
 	{
-		EntriesContainer entries;
-		SectionsContainer sections;
+		SectionContainer sections;
+		EntryContainer entries;
+
+		EntryContainer& appendSection(const std::string& name)
+		{
+			this->sections[name] = EntryContainer();
+			return this->sections[name];
+		}
+
+		bool hasSection(const std::string& name)
+		{
+			return this->sections.find(name) != this->sections.end();
+		}
 	};
 
 	struct Result
@@ -62,6 +267,7 @@ namespace Ini
 		{
 			OK,
 			Unreadable,
+			Unwritable,
 			SyntaxError
 		} code;
 		std::string details;
@@ -81,7 +287,7 @@ namespace Ini
 	class Parser
 	{
 	public:
-		inline Result parse(const std::string &source, Model &model)
+		Result parse(const std::string &source, Model &model)
 		{
 			bool isSection = false;
 			bool isComment = false;
@@ -93,7 +299,7 @@ namespace Ini
 			std::string entryName;
 			std::string buffer;
 
-			EntriesContainer *ec = nullptr;
+			EntryContainer*ec = nullptr;
 
 			for (char c : source)
 			{
@@ -130,7 +336,7 @@ namespace Ini
 				case ']':
 					if (isSection)
 					{
-						model.sections[buffer] = EntriesContainer();
+						model.sections[buffer] = EntryContainer();
 						ec = &model.sections[buffer];
 						isSection = false;
 						buffer.clear();
@@ -194,9 +400,9 @@ namespace Ini
 			return Result::Code::OK;
 		}
 
-		inline Result readFile(const std::string &path, Model &model)
+		Result readFile(const std::string &path, Model &model)
 		{
-			std::ifstream str(path, std::ios_base::in | std::ios_base::ate);
+			std::ifstream str(path, std::ios_base::in | std::ios_base::ate | std::ios_base::binary);
 			if (str.is_open())
 			{
 				std::streamoff size = str.tellg();
@@ -211,8 +417,43 @@ namespace Ini
 			return Result::Code::Unreadable;
 		}
 
+		Result writeFile(const std::string &path, Model& model)
+		{
+			std::ofstream str(path, std::ios_base::out | std::ios_base::binary);
+			if (str.is_open())
+			{
+				for (const auto &entry : model.entries)
+				{
+					std::string key = entry.first;
+					std::string value = entry.second->toString();
+
+					str << key << " = " << value << "\n";
+				}
+
+				for (const auto& section : model.sections)
+				{
+					std::string key = section.first;
+					const auto &entries = section.second;
+
+					str << "\n[" << key << "]" << "\n";
+
+					for (const auto& entry : entries)
+					{
+						std::string key = entry.first;
+						std::string value = entry.second->toString();
+
+						str << key << " = " << value << "\n";
+					}
+				}
+
+				return Result::Code::OK;
+			}
+
+			return Result::Code::Unwritable;
+		}
+
 	private:
-		inline char escapeChar(char c)
+		char escapeChar(char c)
 		{
 			switch (c)
 			{
@@ -222,36 +463,36 @@ namespace Ini
 			}
 		}
 		
-		inline void rtrim(std::string& s, const char* t = " \t\n\r\f\v")
+		void rtrim(std::string& s, const char* t = " \t\n\r\f\v")
 		{
 			s.erase(s.find_last_not_of(t) + 1);
 		}
 
-		inline void ltrim(std::string& s, const char* t = " \t\n\r\f\v")
+		void ltrim(std::string& s, const char* t = " \t\n\r\f\v")
 		{
 			s.erase(0, s.find_first_not_of(t));
 		}
 
-		inline void trim(std::string& s, const char* t = " \t\n\r\f\v")
+		void trim(std::string& s, const char* t = " \t\n\r\f\v")
 		{
 			rtrim(s, t);
 			ltrim(s, t);
 		}
 
-		inline EntryType makeEntry(const std::string &text)
+		std::unique_ptr<Entry> makeEntry(const std::string &text)
 		{
-			return EntryType(new RegularEntry(text));
+			return std::make_unique<ScalarEntry>(text);
 		}
 
-		inline void pushEntry(EntriesContainer *ec, Model &model, const std::string &entryName, const std::string entry)
+		void pushEntry(EntryContainer*ec, Model &model, const std::string &entryName, const std::string entry)
 		{
 			if (ec)
-				(*ec)[entryName] = makeEntry(entry);
+				ec->entries[entryName] = makeEntry(entry);
 			else
-				model.entries[entryName] = makeEntry(entry);
+				model.entries.entries[entryName] = makeEntry(entry);
 		}
 
-		inline std::unique_ptr<VectorEntry> makeVectorEntry(const std::string &text)
+		std::unique_ptr<VectorEntry> makeVectorEntry(const std::string &text)
 		{
 			unsigned int level = 0;
 			std::string buffer;
@@ -311,12 +552,12 @@ namespace Ini
 			return std::unique_ptr<VectorEntry>(v);
 		}
 
-		inline void pushVectorEntry(EntriesContainer *ec, Model &model, const std::string &entryName, const std::string entry)
+		void pushVectorEntry(EntryContainer*ec, Model &model, const std::string &entryName, const std::string entry)
 		{
 			if (ec)
-				(*ec)[entryName] = makeVectorEntry(entry);
+				ec->entries[entryName] = makeVectorEntry(entry);
 			else
-				model.entries[entryName] = makeVectorEntry(entry);
+				model.entries.entries[entryName] = makeVectorEntry(entry);
 		}
 	};
 }
