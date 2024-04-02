@@ -6,6 +6,8 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <cassert>
+#include <algorithm>
 
 namespace Ini
 {
@@ -208,6 +210,8 @@ namespace Ini
 		Container::const_iterator begin() const { return this->entries.begin(); }
 		Container::const_iterator end() const { return this->entries.end(); }
 
+		bool contains(const std::string& idx) const { return this->entries.find(idx) != this->entries.end(); }
+
 		Entry& operator[](const std::string &idx)
 		{
 			if (this->entries.find(idx) == this->entries.end())
@@ -215,7 +219,11 @@ namespace Ini
 			return *this->entries[idx];
 		}
 
-		const Entry& operator[](const std::string& idx) const { return *this->entries.at(idx); }
+		const Entry& operator[](const std::string& idx) const
+		{
+			assert(this->contains(idx) && "Index not found");
+			return *this->entries.at(idx);
+		}
 		const Entry& at(const std::string& idx) const { return (*this)[idx]; }
 	};
 
@@ -230,6 +238,7 @@ namespace Ini
 		Container::const_iterator end() const { return this->sections.end(); }
 
 		Container::iterator find(const std::string& idx) { return this->sections.find(idx); };
+		bool contains(const std::string& idx) const { return this->sections.find(idx) != this->sections.end(); }
 
 		EntryContainer& operator[](const std::string& idx)
 		{
@@ -238,7 +247,11 @@ namespace Ini
 			return this->sections[idx];
 		}
 
-		const EntryContainer& operator[](const std::string& idx) const { return this->sections.at(idx); }
+		const EntryContainer& operator[](const std::string& idx) const
+		{
+			assert(this->contains(idx) && "Index not found");
+			return this->sections.at(idx);
+		}
 		const EntryContainer& at(const std::string& idx) const { return (*this)[idx]; }
 	};
 
@@ -294,6 +307,7 @@ namespace Ini
 			bool isEscape = false;
 			bool isValue = false;
 			bool isNewLine = true;
+			bool isInQuote = false;
 			unsigned int arrayLevel = 0; // 0 - not in array
 
 			std::string entryName;
@@ -314,6 +328,12 @@ namespace Ini
 				{
 					buffer.push_back(escapeChar(c));
 					isEscape = false;
+				}
+
+				if (isInQuote && c != '"')
+				{
+					buffer.push_back(c);
+					continue;
 				}
 
 				switch (c)
@@ -355,9 +375,14 @@ namespace Ini
 					break;
 
 				case '=':
-					trim(buffer);
-					entryName = buffer;
-					buffer.clear();
+					if (entryName.empty())
+					{
+						trim(buffer);
+						entryName = buffer;
+						buffer.clear();
+					}
+					else
+						buffer.push_back(c);
 					break;
 
 				case ';':
@@ -384,6 +409,20 @@ namespace Ini
 					}
 					else
 						buffer.push_back(c);
+					break;
+
+				case '"':
+					if (isInQuote)
+					{
+						isInQuote = false;
+					}
+					else
+					{
+						if (std::all_of(buffer.begin(), buffer.end(), isspace))
+						{
+							isInQuote = true;
+						}
+					}
 					break;
 
 				default:
@@ -419,6 +458,7 @@ namespace Ini
 
 		Result writeFile(const std::string &path, Model& model)
 		{
+			bool first = true;
 			std::ofstream str(path, std::ios_base::out | std::ios_base::binary);
 			if (str.is_open())
 			{
@@ -428,6 +468,8 @@ namespace Ini
 					std::string value = entry.second->toString();
 
 					str << key << " = " << value << "\n";
+
+					first = false;
 				}
 
 				for (const auto& section : model.sections)
@@ -435,7 +477,11 @@ namespace Ini
 					std::string key = section.first;
 					const auto &entries = section.second;
 
-					str << "\n[" << key << "]" << "\n";
+					std::string line = "[" + key + "]" + "\n";
+					if (!first)
+						line = "\n" + line;
+
+					str << line;
 
 					for (const auto& entry : entries)
 					{
@@ -444,6 +490,8 @@ namespace Ini
 
 						str << key << " = " << value << "\n";
 					}
+
+					first = false;
 				}
 
 				return Result::Code::OK;

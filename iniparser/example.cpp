@@ -8,13 +8,17 @@ void readIni()
 	Ini::Result resultExample = Ini::Parser().readFile("../resources/example.ini", model);
 
 	std::cout << model.entries["int_variable"].toInt() << std::endl;
-	std::cout << "Not-existing entry: " << model.entries["non_existent_thing"].toInt() << std::endl;
+	std::cout << "Not-existing int entry: " << model.entries["non_existent_int"].toInt() << std::endl;
+	std::cout << "Not-existing bool entry: " << model.entries["non_existent_bool"].toBool(false) << std::endl;
 
 	auto& section = model.sections["section"];
 	for (const auto& val : section)
 	{
 		std::cout << val.second->getValue() << std::endl;
 	}
+
+	const Ini::Section& constSection = model.sections["windows"];
+	//std::cout << "Not-existing section int entry: " << constSection["non_existent_section_int"].toInt() << std::endl;
 
 	Ini::Section& xxx = model.sections["asd"];
 	Ini::VectorEntry* arrayDataExample = model.sections["array"]["nums"].getVector();

@@ -28,6 +28,11 @@ SCENARIO("Standard file can be parsed", "[ini]")
 					REQUIRE(model.entries["int_variable"].toString() == "42");
 					REQUIRE(model.entries["string_variable"].toString() == "hello");
 					REQUIRE(model.entries["string_variable2"].toString() == "h3ll0");
+					REQUIRE(model.entries["bool_value"].toBool() == true);
+					REQUIRE(model.entries["with_equal_characters"].toString() == "one=two=three");
+					REQUIRE(model.entries["in_quoration"].toString() == "qwerty;uiop=1=2=3");
+					REQUIRE(model.entries["outside_quoration"].toString() != "qwerty;uiop=1=2=3");
+					REQUIRE(model.entries["multiline_quotation"].toString() != "first\nsecond\nthird");
 
 					REQUIRE(model.sections["section"]["var"].toInt() == 1337);
 
