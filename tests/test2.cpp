@@ -1,6 +1,6 @@
-#include <iniparser.hpp>
+#include <iniparser/iniparser.hpp>
 
-#include <catch/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 SCENARIO("Including iniparser in two files wont give linker errors", "[ini]")
 {
@@ -10,7 +10,7 @@ SCENARIO("Including iniparser in two files wont give linker errors", "[ini]")
 
 		AND_GIVEN("A correct .ini file")
 		{
-			std::string path = "../resources/example.ini";
+			std::string path = "resources/example.ini";
 
 			WHEN("File is read")
 			{

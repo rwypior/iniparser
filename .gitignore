@@ -1,10 +1,5 @@
 .vs/
-Debug/
-Release/
-iniparser/Debug/
-iniparser/Release/
-iniparser/*.user
-Test/Debug/
-Test/Release/
-Test/*.user
-resources/created.ini
+out/
+build/
+CMakeUserPresets.json
+CMakeSettings.json
